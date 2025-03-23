@@ -1,70 +1,94 @@
-import { signOutAction } from "@/app/actions/Authentication/actions";
-import { hasEnvVars } from "@/utils/supabase/check-env-vars";
-import Link from "next/link";
-import { Badge } from "./ui/badge";
-import { Button } from "./ui/button";
-import { createClient } from "@/utils/supabase/server";
+"use client"
 
-export default async function AuthButton() {
-  const supabase = await createClient();
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { useEffect, useState } from "react"
+import { createClient } from "@/utils/supabase/client"
+import type { User } from "@supabase/supabase-js"
+import { useRouter } from "next/navigation"
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export default function HeaderAuth() {
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
+  const router = useRouter()
 
-  if (!hasEnvVars) {
-    return (
-      <>
-        <div className="flex gap-4 items-center">
-          <div>
-            <Badge
-              variant={"default"}
-              className="font-normal pointer-events-none"
-            >
-              Please update .env.local file with anon key and url
-            </Badge>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              asChild
-              size="sm"
-              variant={"outline"}
-              disabled
-              className="opacity-75 cursor-none pointer-events-none"
-            >
-              <Link href="/sign-in">Sign in</Link>
-            </Button>
-            <Button
-              asChild
-              size="sm"
-              variant={"default"}
-              disabled
-              className="opacity-75 cursor-none pointer-events-none"
-            >
-              <Link href="/sign-up">Sign up</Link>
-            </Button>
-          </div>
-        </div>
-      </>
-    );
+  useEffect(() => {
+    const supabase = createClient()
+
+    // Verificar sessão atual
+    const checkSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      setUser(session?.user || null)
+      setLoading(false)
+    }
+
+    checkSession()
+
+    // Configurar listener para mudanças de autenticação
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null)
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  const handleLogout = async () => {
+    try {
+      const supabase = createClient()
+      await supabase.auth.signOut()
+      router.push("/")
+      router.refresh()
+    } catch (error) {
+      console.error("Erro ao fazer logout:", error)
+    }
   }
-  return user ? (
-    <div className="flex items-center gap-4">
-      Hey, {user.email}!
-      <form action={signOutAction}>
-        <Button type="submit" variant={"outline"}>
-          Sign out
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-4">
+        <div className="h-9 w-20 bg-[#3F4F44]/20 animate-pulse rounded-md"></div>
+      </div>
+    )
+  }
+
+  if (user) {
+    return (
+      <div className="flex items-center gap-4">
+        <Link href="/dashboard" className="text-[#3F4F44] hover:text-[#A27B5C] transition-colors">
+          Dashboard
+        </Link>
+        <Button
+          onClick={handleLogout}
+          variant="outline"
+          className="border-[#3F4F44] text-[#3F4F44] hover:bg-[#3F4F44] hover:text-[#DCD7C9]"
+        >
+          Sair
         </Button>
-      </form>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-4">
+      <Link
+        href="/auth/sign-in"
+        className="inline-flex h-9 items-center justify-center rounded-md border border-[#3F4F44] bg-transparent px-4 py-2 text-sm font-medium text-[#3F4F44] shadow-sm transition-colors hover:bg-[#3F4F44] hover:text-[#DCD7C9] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#A27B5C]"
+      >
+        Entrar
+      </Link>
+      <Link
+        href="/auth/sign-up"
+        className="inline-flex h-9 items-center justify-center rounded-md bg-[#A27B5C] px-4 py-2 text-sm font-medium text-[#DCD7C9] shadow transition-colors hover:bg-[#8a6a4e] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#A27B5C]"
+      >
+        Cadastrar
+      </Link>
     </div>
-  ) : (
-    <div className="flex gap-2">
-      <Button asChild size="sm" variant={"outline"}>
-        <Link href="/sign-in">Sign in</Link>
-      </Button>
-      {/* <Button asChild size="sm" variant={"default"}>
-        <Link href="/sign-up">Sign up</Link>
-      </Button> */}
-    </div>
-  );
+  )
 }
+
